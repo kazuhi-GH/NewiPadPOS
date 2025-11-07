@@ -1,0 +1,951 @@
+﻿@page "/"
+@using NewiPadPOS.Models
+@using NewiPadPOS.Services
+@inject IProductService ProductService
+@inject ICartService CartService
+@inject IOrderService OrderService
+@inject IEmailService EmailService
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
+<PageTitle>iPad POS システム</PageTitle>
+
+<div class="pos-layout">
+    <!-- 商品選択エリア -->
+    <div class="products-section">
+        <!-- カテゴリナビゲーション -->
+        <div class="category-nav">
+            <button class="category-btn @(selectedCategory == "すべて" ? "active" : "") touch-target" 
+                    @onclick='() => SelectCategory("すべて")'>
+                🏪 すべて
+            </button>
+            @foreach (var category in categories)
+            {
+                <button class="category-btn @(selectedCategory == category ? "active" : "") touch-target" 
+                        @onclick="() => SelectCategory(category)">
+                    @GetCategoryIcon(category) @category
+                </button>
+            }
+        </div>
+
+        <!-- 商品グリッド -->
+        <div class="products-grid">
+            @foreach (var product in filteredProducts)
+            {
+                <div class="product-card touch-target @(product.StockQuantity == 0 ? "out-of-stock" : "")" 
+                     @onclick="() => AddProductToCart(product)"
+                     style="@(product.StockQuantity == 0 ? "opacity: 0.5; cursor: not-allowed;" : "")">
+                    <div class="product-icon">@GetProductIcon(product)</div>
+                    <div class="product-name">@product.Name</div>
+                    <div class="product-price">¥@product.Price.ToString("N0")</div>
+                    <div class="product-stock @(product.StockQuantity <= 5 && product.StockQuantity > 0 ? "stock-low" : "")">
+                        @if (product.StockQuantity == 0)
+                        {
+                            <span>売り切れ</span>
+                        }
+                        else
+                        {
+                            <span>在庫: @product.StockQuantity</span>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- カートエリア -->
+    <div class="cart-section">
+        <div class="cart-header">
+            <div class="cart-title">
+                <span>カート (@cart.ItemCount)</span>
+                @if (!cart.IsEmpty)
+                {
+                    <button class="clear-cart-btn touch-target" @onclick="ClearCart">
+                        クリア
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div class="cart-items-container">
+            @if (cart.IsEmpty)
+            {
+                <div class="empty-cart-message">
+                    <div>🛒</div>
+                    <div>商品を選択してカートに追加してください</div>
+                </div>
+            }
+            else
+            {
+                @foreach (var item in cart.Items)
+                {
+                    <div class="cart-item">
+                        <div class="item-details">
+                            <div class="item-name">@item.Product.Name</div>
+                            <div class="item-price-info">¥@item.UnitPrice.ToString("N0") × @item.Quantity</div>
+                            
+                            <div class="quantity-controls">
+                                <button class="qty-btn touch-target" @onclick="() => DecreaseQuantity(item.Product.Id)">
+                                    −
+                                </button>
+                                <div class="qty-display">@item.Quantity</div>
+                                <button class="qty-btn touch-target" @onclick="() => IncreaseQuantity(item.Product.Id)">
+                                    ＋
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="item-actions">
+                            <div class="item-total">
+                                ¥@item.TotalPrice.ToString("N0")
+                            </div>
+                            <button class="remove-btn touch-target" @onclick="() => RemoveFromCart(item.Product.Id)">
+                                削除
+                            </button>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        @if (!cart.IsEmpty)
+        {
+            <div class="cart-summary">
+                <div class="summary-row">
+                    <span>小計:</span>
+                    <span>¥@cart.Subtotal.ToString("N0")</span>
+                </div>
+                <div class="summary-row">
+                    <span>消費税 (@(Math.Round(cart.TaxRate * 100))%):</span>
+                    <span>¥@cart.Tax.ToString("N0")</span>
+                </div>
+                <div class="summary-row total">
+                    <span>合計:</span>
+                    <span>¥@cart.Total.ToString("N0")</span>
+                </div>
+
+                <!-- 決済方法選択 -->
+                <div class="payment-methods">
+                    <div class="payment-title">💳 決済方法を選択</div>
+                    <div class="payment-options">
+                        <button class="payment-btn @(selectedPaymentMethod == PaymentMethod.Cash ? "active" : "") touch-target"
+                                @onclick="() => SelectPaymentMethod(PaymentMethod.Cash)">
+                            💵 現金
+                        </button>
+                        <button class="payment-btn @(selectedPaymentMethod == PaymentMethod.CreditCard ? "active" : "") touch-target"
+                                @onclick="() => SelectPaymentMethod(PaymentMethod.CreditCard)">
+                            💳 クレジット
+                        </button>
+                        <button class="payment-btn @(selectedPaymentMethod == PaymentMethod.DigitalPayment ? "active" : "") touch-target"
+                                @onclick="() => SelectPaymentMethod(PaymentMethod.DigitalPayment)">
+                            📱 QR Pay
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 電子レシートオプション -->
+                <div class="receipt-options">
+                    <div class="receipt-title">📧 電子レシート</div>
+                    <div class="email-input-container">
+                        <input type="email" 
+                               class="email-input touch-target" 
+                               placeholder="メールアドレス (任意)"
+                               @bind="customerEmail"
+                               @bind:event="oninput" />
+                        <button class="email-toggle-btn @(sendEmailReceipt ? "active" : "") touch-target"
+                                @onclick="ToggleEmailReceipt">
+                            @(sendEmailReceipt ? "✓" : "○")
+                        </button>
+                    </div>
+                    @if (sendEmailReceipt && string.IsNullOrWhiteSpace(customerEmail))
+                    {
+                        <div class="email-validation">
+                            ⚠️ メールアドレスを入力してください
+                        </div>
+                    }
+                </div>
+                
+                <button class="checkout-btn touch-target" @onclick="ProcessCheckout" disabled="@(isProcessing || selectedPaymentMethod == null || (sendEmailReceipt && string.IsNullOrWhiteSpace(customerEmail)))">
+                    @if (isProcessing)
+                    {
+                        <span class="loading-spinner"></span>
+                        <span>@GetProcessingMessage()</span>
+                    }
+                    else if (selectedPaymentMethod == null)
+                    {
+                        <span>決済方法を選択してください</span>
+                    }
+                    else if (sendEmailReceipt && string.IsNullOrWhiteSpace(customerEmail))
+                    {
+                        <span>メールアドレスを入力してください</span>
+                    }
+                    else
+                    {
+                        <span>@GetCheckoutButtonText() (¥@cart.Total.ToString("N0"))</span>
+                    }
+                </button>
+                
+                @if (sendEmailReceipt && !string.IsNullOrWhiteSpace(customerEmail))
+                {
+                    <button class="preview-receipt-btn touch-target" @onclick="PreviewReceipt">
+                        👁️ レシートプレビュー
+                    </button>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<!-- QRコード決済モーダル -->
+@if (showQRModal)
+{
+    <div class="qr-modal-overlay" @onclick="CloseQRModal">
+        <div class="qr-modal" @onclick:stopPropagation="true">
+            <div class="qr-header">
+                <h3>📱 QR決済</h3>
+                <button class="close-btn" @onclick="CloseQRModal">×</button>
+            </div>
+            <div class="qr-content">
+                <div class="qr-code-placeholder">
+                    <div class="qr-code">
+                        <!-- 実際のQRコード生成ライブラリで置き換え -->
+                        <div class="mock-qr-code">
+                            <div class="qr-pattern"></div>
+                            <div class="qr-pattern"></div>
+                            <div class="qr-pattern"></div>
+                            <div class="qr-pattern"></div>
+                        </div>
+                    </div>
+                </div>
+                <p class="qr-instruction">
+                    📲 スマートフォンのQRコードリーダーで<br>
+                    上記のコードを読み取ってください
+                </p>
+                <div class="payment-amount">
+                    💰 お支払い金額: ¥@cart.Total.ToString("N0")
+                </div>
+                <button class="simulate-payment-btn" @onclick="SimulateQRPayment">
+                    ✅ 決済完了をシミュレート
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- レシートプレビューモーダル -->
+@if (showReceiptPreview)
+{
+    <div class="receipt-preview-overlay" @onclick="CloseReceiptPreview" style="display: flex !important;">
+        <div class="receipt-preview-modal" @onclick:stopPropagation="true">
+            <div class="receipt-preview-header">
+                <h3>📧 電子レシート プレビュー</h3>
+                <button class="close-btn" @onclick="CloseReceiptPreview">×</button>
+            </div>
+            <div class="receipt-preview-content">
+                @if (!string.IsNullOrEmpty(previewHtml))
+                {
+                    <div class="preview-receipt">
+                        @((MarkupString)previewHtml)
+                    </div>
+                }
+                else
+                {
+                    <div style="padding: 20px; text-align: center; color: #666;">
+                        レシートを生成中...
+                    </div>
+                }
+            </div>
+            <div class="receipt-preview-footer">
+                <button class="preview-close-btn" @onclick="CloseReceiptPreview">
+                    閉じる
+                </button>
+                <button class="send-email-btn" @onclick="SendEmailFromPreview" disabled="@isProcessing">
+                    @if (isProcessing)
+                    {
+                        <span>📧 送信中...</span>
+                    }
+                    else
+                    {
+                        <span>📧 メールで送信</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Product> products = new();
+    private List<Product> filteredProducts = new();
+    private List<string> categories = new();
+    private string selectedCategory = "すべて";
+    private Cart cart = new();
+    private bool isProcessing = false;
+    private PaymentMethod? selectedPaymentMethod = PaymentMethod.Cash;
+    private bool showQRModal = false;
+    private bool sendEmailReceipt = false;
+    private string customerEmail = string.Empty;
+    private bool showReceiptPreview = false;
+    private string previewHtml = string.Empty;
+    private Order? currentOrder = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadInitialData();
+        CartService.OnCartChanged += OnCartChanged;
+    }
+
+    public void Dispose()
+    {
+        CartService.OnCartChanged -= OnCartChanged;
+    }
+
+    private async Task LoadInitialData()
+    {
+        try
+        {
+            products = await ProductService.GetAllProductsAsync();
+            categories = await ProductService.GetCategoriesAsync();
+            cart = CartService.GetCart();
+            FilterProducts();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "データの読み込みに失敗しました: " + ex.Message);
+        }
+    }
+
+    private void OnCartChanged()
+    {
+        cart = CartService.GetCart();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void SelectCategory(string category)
+    {
+        selectedCategory = category;
+        FilterProducts();
+        StateHasChanged();
+    }
+
+    private void FilterProducts()
+    {
+        filteredProducts = selectedCategory == "すべて" 
+            ? products 
+            : products.Where(p => p.Category == selectedCategory).ToList();
+    }
+
+    private async Task AddProductToCart(Product product)
+    {
+        if (product.StockQuantity <= 0)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "申し訳ございません。この商品は売り切れです。");
+            return;
+        }
+
+        try
+        {
+            CartService.AddToCart(product);
+            
+            // 軽い触覚フィードバック効果（もしあれば）
+            await JSRuntime.InvokeVoidAsync("navigator.vibrate", new object[] { 50 });
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "カートに追加できませんでした: " + ex.Message);
+        }
+    }
+
+    private void IncreaseQuantity(int productId)
+    {
+        var product = products.FirstOrDefault(p => p.Id == productId);
+        var cartItem = cart.Items.FirstOrDefault(i => i.Product.Id == productId);
+        
+        if (product != null && cartItem != null)
+        {
+            if (cartItem.Quantity >= product.StockQuantity)
+            {
+                JSRuntime.InvokeVoidAsync("alert", "在庫が不足しています。");
+                return;
+            }
+            
+            CartService.UpdateQuantity(productId, cartItem.Quantity + 1);
+        }
+    }
+
+    private void DecreaseQuantity(int productId)
+    {
+        var cartItem = cart.Items.FirstOrDefault(i => i.Product.Id == productId);
+        if (cartItem != null && cartItem.Quantity > 1)
+        {
+            CartService.UpdateQuantity(productId, cartItem.Quantity - 1);
+        }
+    }
+
+    private void RemoveFromCart(int productId)
+    {
+        CartService.RemoveFromCart(productId);
+    }
+
+    private void ClearCart()
+    {
+        CartService.ClearCart();
+    }
+
+    private async Task ProcessCheckout()
+    {
+        if (cart.IsEmpty || selectedPaymentMethod == null) return;
+
+        // QRコード決済の場合はモーダルを表示
+        if (selectedPaymentMethod == PaymentMethod.DigitalPayment)
+        {
+            showQRModal = true;
+            StateHasChanged();
+            return;
+        }
+
+        isProcessing = true;
+        StateHasChanged();
+
+        try
+        {
+            // 決済方法に応じた処理時間をシミュレート
+            await SimulatePaymentProcessing(selectedPaymentMethod.Value);
+            
+            await CompletePayment();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "❌ 決済エラーが発生しました: " + ex.Message);
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetCategoryIcon(string category)
+    {
+        return category switch
+        {
+            "ドリンク" => "🥤",
+            "フード" => "🍽️",
+            "デザート" => "🧁",
+            _ => "📦"
+        };
+    }
+    
+    private string GetProductIcon(Product product)
+    {
+        return product.Category.ToLower() switch
+        {
+            "ドリンク" => product.Name.Contains("コーヒー") || product.Name.Contains("カフェ") || product.Name.Contains("アメリカーノ") || product.Name.Contains("カプチーノ") ? "☕" :
+                          product.Name.Contains("茶") ? "🍵" : "🥤",
+            "フード" => product.Name.Contains("クロワッサン") ? "🥐" :
+                        product.Name.Contains("サンドイッチ") ? "🥪" :
+                        product.Name.Contains("サラダ") ? "🥗" :
+                        product.Name.Contains("パスタ") ? "🍝" : "🍽️",
+            "デザート" => product.Name.Contains("ケーキ") ? "🍰" :
+                          product.Name.Contains("ティラミス") ? "🧁" :
+                          product.Name.Contains("クッキー") ? "🍪" : "🍮",
+            _ => "🏷️"
+        };
+    }
+
+    private void SelectPaymentMethod(PaymentMethod method)
+    {
+        selectedPaymentMethod = method;
+        StateHasChanged();
+    }
+
+    private string GetCheckoutButtonText()
+    {
+        return selectedPaymentMethod switch
+        {
+            PaymentMethod.Cash => "💵 現金で会計",
+            PaymentMethod.CreditCard => "💳 クレジット決済",
+            PaymentMethod.DigitalPayment => "📱 QR決済",
+            _ => "🛒 会計"
+        };
+    }
+
+    private string GetProcessingMessage()
+    {
+        return selectedPaymentMethod switch
+        {
+            PaymentMethod.Cash => "現金を確認中...",
+            PaymentMethod.CreditCard => "カード処理中...",
+            PaymentMethod.DigitalPayment => "QR決済処理中...",
+            _ => "処理中..."
+        };
+    }
+
+    private string GetPaymentMethodDisplayName(PaymentMethod method)
+    {
+        return method switch
+        {
+            PaymentMethod.Cash => "現金",
+            PaymentMethod.CreditCard => "クレジットカード",
+            PaymentMethod.DigitalPayment => "QR決済",
+            PaymentMethod.DebitCard => "デビットカード",
+            PaymentMethod.Other => "その他",
+            _ => "不明"
+        };
+    }
+
+    private async Task SimulatePaymentProcessing(PaymentMethod method)
+    {
+        // 決済方法に応じた処理時間をシミュレート
+        var delay = method switch
+        {
+            PaymentMethod.Cash => 500,        // 現金: 0.5秒
+            PaymentMethod.CreditCard => 2000,  // クレジット: 2秒
+            PaymentMethod.DigitalPayment => 1500, // QR決済: 1.5秒
+            _ => 1000
+        };
+
+        await Task.Delay(delay);
+        
+        // 決済失敗のシミュレーション（5%の確率）
+        if (method != PaymentMethod.Cash && new Random().Next(100) < 5)
+        {
+            throw new Exception("決済処理に失敗しました。もう一度お試しください。");
+        }
+    }
+
+    private void ToggleEmailReceipt()
+    {
+        sendEmailReceipt = !sendEmailReceipt;
+        StateHasChanged();
+    }
+
+    private string ExtractNameFromEmail(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return "お客様";
+        
+        var parts = email.Split('@');
+        if (parts.Length > 0)
+        {
+            var localPart = parts[0];
+            // ドットやアンダースコアをスペースに置き換え
+            return string.Join(" ", localPart.Split(new char[] { '.', '_' }, StringSplitOptions.RemoveEmptyEntries))
+                         .Replace("-", " ")
+                         .Trim();
+        }
+        
+        return "お客様";
+    }
+
+    private async Task SendEmailReceipt(Order order, string emailAddress)
+    {
+        try
+        {
+            var customerName = ExtractNameFromEmail(emailAddress);
+            var htmlReceipt = GenerateReceiptHtml(order, customerName);
+            var success = await EmailService.SendReceiptAsync(emailAddress, htmlReceipt);
+            
+            if (!success)
+            {
+                await JSRuntime.InvokeVoidAsync("console.warn", "メール送信に失敗しましたが、注文は正常に完了しました。");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "メール送信エラー: " + ex.Message);
+        }
+    }
+
+    private string GenerateHtmlReceipt(Order order)
+    {
+        var customerName = order.CustomerName ?? "お客様";
+        var storeName = "カフェ iPad POS";
+        var storeAddress = "〒123-4567 東京都渋谷区道玄坂47-1";
+        var storePhone = "03-1234-5678";
+        
+        var itemsHtml = string.Join("", order.OrderItems.Select(item => $@"
+            <tr>
+                <td style='padding: 8px 0; border-bottom: 1px solid #f0f0f0;'>{item.Product.Name}</td>
+                <td style='padding: 8px 0; border-bottom: 1px solid #f0f0f0; text-align: center;'>{item.Quantity}</td>
+                <td style='padding: 8px 0; border-bottom: 1px solid #f0f0f0; text-align: right;'>¥{item.UnitPrice:N0}</td>
+                <td style='padding: 8px 0; border-bottom: 1px solid #f0f0f0; text-align: right;'>¥{item.TotalPrice:N0}</td>
+            </tr>"));
+
+        return $@"
+<!DOCTYPE html>
+<html lang='ja'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>電子レシート</title>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; }}
+        .receipt {{ max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); overflow: hidden; }}
+        .header {{ background: linear-gradient(135deg, #007AFF 0%, #5856D6 100%); color: white; padding: 30px 25px; text-align: center; }}
+        .store-name {{ font-size: 24px; font-weight: bold; margin-bottom: 10px; }}
+        .store-info {{ font-size: 14px; opacity: 0.9; line-height: 1.5; }}
+        .content {{ padding: 25px; }}
+        .order-info {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 25px; padding: 20px; background: #f8f9fa; border-radius: 8px; }}
+        .order-number {{ font-size: 18px; font-weight: bold; color: #007AFF; }}
+        .order-date {{ color: #666; }}
+        .customer-info {{ text-align: right; }}
+        .items-table {{ width: 100%; border-collapse: collapse; margin-bottom: 25px; }}
+        .items-table th {{ background: #f8f9fa; padding: 12px 8px; text-align: left; font-weight: 600; border-bottom: 2px solid #e9ecef; }}
+        .totals {{ border-top: 2px solid #e9ecef; padding-top: 20px; }}
+        .total-row {{ display: flex; justify-content: space-between; margin-bottom: 8px; }}
+        .total-final {{ font-size: 20px; font-weight: bold; color: #007AFF; border-top: 1px solid #e9ecef; padding-top: 12px; margin-top: 12px; }}
+        .footer {{ background: #f8f9fa; padding: 20px 25px; text-align: center; color: #666; font-size: 14px; }}
+        .thank-you {{ font-size: 18px; color: #007AFF; font-weight: 600; margin-bottom: 10px; }}
+    </style>
+</head>
+<body>
+    <div class='receipt'>
+        <div class='header'>
+            <div class='store-name'>🏪 {storeName}</div>
+            <div class='store-info'>
+                {storeAddress}<br>
+                TEL: {storePhone}
+            </div>
+        </div>
+        
+        <div class='content'>
+            <div class='order-info'>
+                <div>
+                    <div class='order-number'>📋 {order.OrderNumber}</div>
+                    <div class='order-date'>🗓️ {order.OrderDate:yyyy年MM月dd日 HH:mm}</div>
+                </div>
+                <div class='customer-info'>
+                    <div><strong>👤 {customerName} 様</strong></div>
+                    <div>💳 {GetPaymentMethodDisplayName(order.PaymentMethod)}</div>
+                </div>
+            </div>
+            
+            <table class='items-table'>
+                <thead>
+                    <tr>
+                        <th>商品名</th>
+                        <th style='text-align: center;'>数量</th>
+                        <th style='text-align: right;'>単価</th>
+                        <th style='text-align: right;'>小計</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {itemsHtml}
+                </tbody>
+            </table>
+            
+            <div class='totals'>
+                <div class='total-row'>
+                    <span>小計:</span>
+                    <span>¥{order.Subtotal:N0}</span>
+                </div>
+                <div class='total-row'>
+                    <span>消費税 (10%):</span>
+                    <span>¥{order.Tax:N0}</span>
+                </div>
+                <div class='total-row total-final'>
+                    <span>合計:</span>
+                    <span>¥{order.Total:N0}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class='footer'>
+            <div class='thank-you'>✨ ご利用ありがとうございました ✨</div>
+            <div>またのご来店をお待ちしております</div>
+        </div>
+    </div>
+</body>
+</html>";
+    }
+
+    private void CloseQRModal()
+    {
+        showQRModal = false;
+        StateHasChanged();
+    }
+
+    private async Task SimulateQRPayment()
+    {
+        isProcessing = true;
+        StateHasChanged();
+
+        try
+        {
+            await Task.Delay(2000); // 2秒のQR決済処理をシミュレート
+            await CompletePayment();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "❌ QR決済エラー: " + ex.Message);
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task PreviewReceipt()
+    {
+        await JSRuntime.InvokeVoidAsync("console.log", "PreviewReceipt called");
+        if (cart.IsEmpty || string.IsNullOrWhiteSpace(customerEmail)) 
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Cart is empty or email is blank");
+            return;
+        }
+        
+        // プレビュー用の仮注文オブジェクトを作成
+        var previewOrder = CreatePreviewOrder();
+        var customerName = ExtractNameFromEmail(customerEmail);
+        previewHtml = GenerateReceiptHtml(previewOrder, customerName);
+        await JSRuntime.InvokeVoidAsync("console.log", "Preview HTML generated, length: " + previewHtml.Length);
+        
+        // UIを更新してからプレビューを表示
+        StateHasChanged();
+        await Task.Delay(100); // UIの更新を待つ
+        
+        showReceiptPreview = true;
+        StateHasChanged();
+        await JSRuntime.InvokeVoidAsync("console.log", "showReceiptPreview set to true in PreviewReceipt");
+    }
+
+    private Order CreatePreviewOrder()
+    {
+        var customerName = ExtractNameFromEmail(customerEmail);
+        return new Order
+        {
+            Id = 0,
+            OrderNumber = "PREVIEW-" + DateTime.Now.ToString("yyyyMMddHHmmss"),
+            OrderDate = DateTime.Now,
+            CustomerName = customerName,
+            PaymentMethod = selectedPaymentMethod ?? PaymentMethod.Cash,
+            Subtotal = cart.Subtotal,
+            Tax = cart.Tax,
+            Total = cart.Total,
+            Status = OrderStatus.Pending,
+            OrderItems = cart.Items.Select((item, index) => new OrderItem
+            {
+                Id = index + 1,
+                ProductId = item.Product.Id,
+                Product = item.Product,
+                Quantity = item.Quantity,
+                UnitPrice = item.UnitPrice
+            }).ToList()
+        };
+    }
+
+    private void CloseReceiptPreview()
+    {
+        showReceiptPreview = false;
+        previewHtml = string.Empty;
+        currentOrder = null;
+        StateHasChanged();
+    }
+
+    private async Task ShowReceiptPreviewAfterPayment()
+    {
+        await JSRuntime.InvokeVoidAsync("console.log", "ShowReceiptPreviewAfterPayment called");
+        if (currentOrder == null) 
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "currentOrder is null");
+            return;
+        }
+        
+        var customerName = ExtractNameFromEmail(customerEmail);
+        previewHtml = GenerateReceiptHtml(currentOrder, customerName);
+        await JSRuntime.InvokeVoidAsync("console.log", "Generated preview HTML length: " + previewHtml.Length);
+        
+        // QRモーダルを閉じる
+        showQRModal = false;
+        isProcessing = false;
+        
+        // UIを更新してからプレビューを表示
+        StateHasChanged();
+        await Task.Delay(100); // UIの更新を待つ
+        
+        showReceiptPreview = true;
+        StateHasChanged();
+        await JSRuntime.InvokeVoidAsync("console.log", "showReceiptPreview set to true");
+    }
+
+    private async Task SendEmailFromPreview()
+    {
+        if (currentOrder == null || string.IsNullOrWhiteSpace(customerEmail)) return;
+        
+        isProcessing = true;
+        StateHasChanged();
+
+        try
+        {
+            await SendEmailReceipt(currentOrder, customerEmail);
+            await FinishPaymentProcess();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "❌ メール送信エラー: " + ex.Message);
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task FinishPaymentProcess()
+    {
+        if (currentOrder == null) return;
+
+        CartService.ClearCart();
+        var paymentMethod = currentOrder.PaymentMethod;
+        selectedPaymentMethod = PaymentMethod.Cash; // デフォルトに戻す
+        showQRModal = false;
+        showReceiptPreview = false;
+        
+        var paymentMethodText = GetPaymentMethodDisplayName(paymentMethod);
+        
+        await JSRuntime.InvokeVoidAsync("alert", 
+            $"🎉 会計が完了しました！\n\n📋 注文番号: {currentOrder.OrderNumber}\n💰 合計金額: ¥{currentOrder.Total:N0}\n💳 決済方法: {paymentMethodText}\n📧 電子レシートを {customerEmail} に送信しました\n\n✨ ありがとうございました。");
+            
+        // リセット
+        sendEmailReceipt = false;
+        customerEmail = string.Empty;
+        currentOrder = null;
+        previewHtml = string.Empty;
+        
+        // 商品の在庫情報を更新
+        await LoadInitialData();
+        isProcessing = false;
+        StateHasChanged();
+    }
+
+    private string GenerateReceiptHtml(Order order, string customerName)
+    {
+        var storeName = "Apple Store 原宿";
+        var storeAddress = "〒150-0001 東京都渋谷区神宮前6-2-6";
+        var storePhone = "03-5411-7200";
+
+        var itemsHtml = string.Join("", order.OrderItems.Select(item => 
+            $@"<tr>
+                <td>{item.Product.Name}</td>
+                <td style='text-align: center;'>{item.Quantity}</td>
+                <td style='text-align: right;'>¥{item.UnitPrice:N0}</td>
+                <td style='text-align: right;'>¥{item.Quantity * item.UnitPrice:N0}</td>
+            </tr>"));
+
+        return $@"
+<!DOCTYPE html>
+<html lang='ja'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>電子レシート</title>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; }}
+        .receipt {{ max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); overflow: hidden; }}
+        .header {{ background: linear-gradient(135deg, #007AFF 0%, #5856D6 100%); color: white; padding: 30px 25px; text-align: center; }}
+        .store-name {{ font-size: 24px; font-weight: bold; margin-bottom: 10px; }}
+        .store-info {{ font-size: 14px; opacity: 0.9; line-height: 1.5; }}
+        .content {{ padding: 25px; }}
+        .order-info {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 25px; padding: 20px; background: #f8f9fa; border-radius: 8px; }}
+        .order-number {{ font-size: 18px; font-weight: bold; color: #007AFF; }}
+        .order-date {{ color: #666; }}
+        .customer-info {{ text-align: right; }}
+        .items-table {{ width: 100%; border-collapse: collapse; margin-bottom: 25px; }}
+        .items-table th {{ background: #f8f9fa; padding: 12px 8px; text-align: left; font-weight: 600; border-bottom: 2px solid #e9ecef; }}
+        .items-table td {{ padding: 12px 8px; border-bottom: 1px solid #e9ecef; }}
+        .totals {{ border-top: 2px solid #e9ecef; padding-top: 20px; }}
+        .total-row {{ display: flex; justify-content: space-between; margin-bottom: 8px; }}
+        .total-final {{ font-size: 20px; font-weight: bold; color: #007AFF; border-top: 1px solid #e9ecef; padding-top: 12px; margin-top: 12px; }}
+        .footer {{ background: #f8f9fa; padding: 20px 25px; text-align: center; color: #666; font-size: 14px; }}
+        .thank-you {{ font-size: 18px; color: #007AFF; font-weight: 600; margin-bottom: 10px; }}
+    </style>
+</head>
+<body>
+    <div class='receipt'>
+        <div class='header'>
+            <div class='store-name'>🏪 {storeName}</div>
+            <div class='store-info'>
+                {storeAddress}<br>
+                TEL: {storePhone}
+            </div>
+        </div>
+        
+        <div class='content'>
+            <div class='order-info'>
+                <div>
+                    <div class='order-number'>📋 {order.OrderNumber}</div>
+                    <div class='order-date'>� {order.OrderDate:yyyy年MM月dd日 HH:mm}</div>
+                </div>
+                <div class='customer-info'>
+                    <div><strong>👤 {customerName} 様</strong></div>
+                    <div>💳 {GetPaymentMethodDisplayName(order.PaymentMethod)}</div>
+                </div>
+            </div>
+            
+            <table class='items-table'>
+                <thead>
+                    <tr>
+                        <th>商品名</th>
+                        <th style='text-align: center;'>数量</th>
+                        <th style='text-align: right;'>単価</th>
+                        <th style='text-align: right;'>小計</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {itemsHtml}
+                </tbody>
+            </table>
+            
+            <div class='totals'>
+                <div class='total-row'>
+                    <span>小計:</span>
+                    <span>¥{order.Subtotal:N0}</span>
+                </div>
+                <div class='total-row'>
+                    <span>消費税 (10%):</span>
+                    <span>¥{order.Tax:N0}</span>
+                </div>
+                <div class='total-row total-final'>
+                    <span>合計:</span>
+                    <span>¥{order.Total:N0}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class='footer'>
+            <div class='thank-you'>✨ ご利用ありがとうございました ✨</div>
+            <div>またのご来店をお待ちしております</div>
+        </div>
+    </div>
+</body>
+</html>";
+    }
+
+    private async Task CompletePayment()
+    {
+        var customerName = sendEmailReceipt ? ExtractNameFromEmail(customerEmail) : null;
+        currentOrder = await OrderService.CreateOrderAsync(cart, customerName, selectedPaymentMethod!.Value);
+        
+        // メールレシート送信が有効な場合は、プレビューを表示
+        await JSRuntime.InvokeVoidAsync("console.log", "Checking email receipt conditions: sendEmailReceipt=" + sendEmailReceipt + ", customerEmail=" + customerEmail);
+        if (sendEmailReceipt && !string.IsNullOrWhiteSpace(customerEmail))
+        {
+            await JSRuntime.InvokeVoidAsync("console.log", "Showing receipt preview after payment");
+            await ShowReceiptPreviewAfterPayment();
+            return; // プレビューモーダルで処理続行
+        }
+        
+        // メールレシートなしの場合の通常処理
+        CartService.ClearCart();
+        var paymentMethod = selectedPaymentMethod.Value;
+        selectedPaymentMethod = PaymentMethod.Cash; // デフォルトに戻す
+        showQRModal = false;
+        
+        var paymentMethodText = GetPaymentMethodDisplayName(paymentMethod);
+        
+        await JSRuntime.InvokeVoidAsync("alert", 
+            $"🎉 会計が完了しました！\n\n📋 注文番号: {currentOrder.OrderNumber}\n💰 合計金額: ¥{currentOrder.Total:N0}\n💳 決済方法: {paymentMethodText}\n\n✨ ありがとうございました。");
+            
+        // リセット
+        sendEmailReceipt = false;
+        customerEmail = string.Empty;
+        currentOrder = null;
+        
+        // 商品の在庫情報を更新
+        await LoadInitialData();
+        isProcessing = false;
+        StateHasChanged();
+    }
+}

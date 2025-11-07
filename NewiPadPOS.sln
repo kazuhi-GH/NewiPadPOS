@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NewiPadPOS", "NewiPadPOS.csproj", "{65A9AA5F-0F7E-80A9-01D8-E0475754A1DE}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{65A9AA5F-0F7E-80A9-01D8-E0475754A1DE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{65A9AA5F-0F7E-80A9-01D8-E0475754A1DE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{65A9AA5F-0F7E-80A9-01D8-E0475754A1DE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{65A9AA5F-0F7E-80A9-01D8-E0475754A1DE}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {5590A1A4-BDEC-4795-8A96-3F0C1793A8C3}
+	EndGlobalSection
+EndGlobal
