@@ -1,4 +1,4 @@
-/* _content/NewiPadPOS/Shared/MainLayout.razor.rz.scp.css */
+/* /Shared/MainLayout.razor.rz.scp.css */
 .page[b-47e7q94ra0] {
     position: relative;
     display: flex;
@@ -69,7 +69,7 @@ main[b-47e7q94ra0] {
         padding-right: 1.5rem !important;
     }
 }
-/* _content/NewiPadPOS/Shared/NavMenu.razor.rz.scp.css */
+/* /Shared/NavMenu.razor.rz.scp.css */
 .navbar-toggler[b-26pwn04g4g] {
     background-color: rgba(255, 255, 255, 0.1);
 }

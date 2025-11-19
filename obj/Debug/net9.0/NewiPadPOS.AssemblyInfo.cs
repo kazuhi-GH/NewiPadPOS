@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("NewiPadPOS")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d70d09daff47c2b42e28a9268077757cc80e4b94")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c3721c4c8ac5385bda79c3e3be32d95f98e38b8e")]
 [assembly: System.Reflection.AssemblyProductAttribute("NewiPadPOS")]
 [assembly: System.Reflection.AssemblyTitleAttribute("NewiPadPOS")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
