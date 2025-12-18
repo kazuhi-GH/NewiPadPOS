@@ -1,0 +1,8 @@
+<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="200" height="200" fill="#00704A"/>
+  <ellipse cx="100" cy="110" rx="50" ry="25" fill="#E8E8E8" opacity="0.8"/>
+  <path d="M 60 90 Q 80 85 100 90 Q 120 95 140 90" stroke="#FFD700" stroke-width="4" fill="none"/>
+  <path d="M 65 95 Q 85 90 100 95 Q 115 100 135 95" stroke="#FFD700" stroke-width="4" fill="none"/>
+  <circle cx="90" cy="85" r="8" fill="#FF6347" opacity="0.7"/>
+  <text x="100" y="170" font-family="Arial" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">PASTA</text>
+</svg>
