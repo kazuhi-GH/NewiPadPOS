@@ -1,0 +1,7 @@
+<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="200" height="200" fill="#00704A"/>
+  <circle cx="100" cy="80" r="45" fill="#3B2820" opacity="0.9"/>
+  <rect x="75" y="90" width="50" height="60" rx="5" fill="#3B2820" opacity="0.9"/>
+  <ellipse cx="100" cy="88" rx="30" ry="10" fill="#000000" opacity="0.3"/>
+  <text x="100" y="170" font-family="Arial" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">AMERICANO</text>
+</svg>

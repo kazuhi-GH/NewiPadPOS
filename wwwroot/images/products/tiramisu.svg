@@ -1,0 +1,7 @@
+<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="200" height="200" fill="#00704A"/>
+  <rect x="60" y="80" width="80" height="15" fill="#F5DEB3" opacity="0.9"/>
+  <rect x="60" y="95" width="80" height="10" fill="#8B4513" opacity="0.7"/>
+  <rect x="60" y="105" width="80" height="15" fill="#F5DEB3" opacity="0.9"/>
+  <text x="100" y="170" font-family="Arial" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">TIRAMISU</text>
+</svg>

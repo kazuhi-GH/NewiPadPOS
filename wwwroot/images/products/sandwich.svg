@@ -1,0 +1,9 @@
+<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="200" height="200" fill="#00704A"/>
+  <rect x="60" y="70" width="80" height="15" rx="3" fill="#D4A574"/>
+  <rect x="60" y="85" width="80" height="8" fill="#90EE90"/>
+  <rect x="60" y="93" width="80" height="8" fill="#FFD700"/>
+  <rect x="60" y="101" width="80" height="8" fill="#FF6347"/>
+  <rect x="60" y="109" width="80" height="15" rx="3" fill="#D4A574"/>
+  <text x="100" y="170" font-family="Arial" font-size="13" font-weight="bold" fill="#FFFFFF" text-anchor="middle">SANDWICH</text>
+</svg>
