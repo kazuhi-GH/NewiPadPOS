@@ -35,7 +35,17 @@
                 <div class="product-card touch-target @(product.StockQuantity == 0 ? "out-of-stock" : "")" 
                      @onclick="() => AddProductToCart(product)"
                      style="@(product.StockQuantity == 0 ? "opacity: 0.5; cursor: not-allowed;" : "")">
-                    <div class="product-icon">@GetProductIcon(product)</div>
+                    @if (!string.IsNullOrEmpty(product.ImageUrl))
+                    {
+                        <div class="product-image">
+                            <img src="@product.ImageUrl" alt="@product.Name" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+                            <div class="product-icon" style="display: none;">@GetProductIcon(product)</div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="product-icon">@GetProductIcon(product)</div>
+                    }
                     <div class="product-name">@product.Name</div>
                     <div class="product-price">¥@product.Price.ToString("N0")</div>
                     <div class="product-stock @(product.StockQuantity <= 5 && product.StockQuantity > 0 ? "stock-low" : "")">
